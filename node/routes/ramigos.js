@@ -226,6 +226,77 @@ module.exports = function (app, swig, gestorBD) {
         });
     });
 
+
+    app.get('/mensajes', function (req, res) {
+        //let criterio = {emisor: req.params.email,destinatario: req.session.usuario};
+        let criterio = { $or: [{amigo1 : req.session.usuario},{amigo2 : req.session.usuario}]};
+
+        let pg = parseInt(req.query.pg); // EsString !!!
+        if (req.query.pg == null) { // Puede no venir el param
+            pg = 1;
+        }
+        gestorBD.obtenerAmistadesPg(criterio, pg, function (amistades, total) {
+            if (amistades == null) {
+                res.send("Error al listar ");
+            } else {
+                let ultimaPg = total / 5;
+                if (total % 5 > 0) { // Sobran decimales
+                    ultimaPg = ultimaPg + 1;
+                }
+                let paginas = []; // paginas mostrar
+                for (let i = pg - 2; i <= pg + 2; i++) {
+                    if (i > 0 && i <= ultimaPg) {
+                        paginas.push(i);
+                    }
+                }
+                if (amistades.length > 0) {
+                    let amigos = amistades.map(function (x) {
+                        if (x.amigo1 != req.session.usuario) return x.amigo1;
+                        else return x.amigo2;
+                    });
+
+                    criterio = {email: {$in: amigos}};
+                    gestorBD.obtenerUsuarios(criterio, function (usuarios) {
+                        if (usuarios == null || usuarios.length == 0) {
+                            res.send(usuarios)
+                        } else {
+                            for (var usuario of usuarios) {
+                                delete usuario['password'];
+                            }
+                            let mensajes = [];
+                            for (var usuario of usuarios) {
+                            let criterio2 = {emisor: req.session.usuario,destino: usuario.email};
+                            gestorBD.obtenerMensajes(criterio2, function (mns) {
+
+                                mensajes.push({amigo: usuario.email ,mensajes: mns.length});
+                            });
+                        }
+                            let respuesta = swig.renderFile('views/bmensajes.html', {
+                                amigos: mensajes,
+                                paginas: paginas,
+                                actual: pg,
+                                session: req.session !== null,
+                                session_user: req.session.usuario
+                            });
+                            res.send(respuesta);
+                        }
+                    });
+
+                }
+                else{
+                    let respuesta = swig.renderFile('views/bamigos.html', {
+                        amigos: [],
+                        paginas: paginas,
+                        actual: pg,
+                        session: req.session !== null,
+                        session_user: req.session.usuario
+                    });
+                    res.send(respuesta);
+                }
+            }
+        });
+    });
+
 }
 
 
